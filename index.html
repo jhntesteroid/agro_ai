@@ -7,33 +7,30 @@
     <link rel="stylesheet" href="https://cloudflare.com">
     <style>
         :root { --primary: #27ae60; --dark: #2c3e50; }
-        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: #f0f2f5; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+        body { font-family: sans-serif; margin: 0; background: #f4f2f5; display: flex; flex-direction: column; align-items: center; }
         header { width: 100%; background: var(--primary); color: white; padding: 15px 0; text-align: center; }
-        .container { width: 95%; max-width: 500px; margin-top: 20px; }
-        #video-wrapper { position: relative; width: 100%; aspect-ratio: 3/4; background: #000; border-radius: 20px; overflow: hidden; }
+        #video-wrapper { width: 90%; max-width: 400px; aspect-ratio: 3/4; background: #000; border-radius: 20px; overflow: hidden; margin-top: 20px; }
         video { width: 100%; height: 100%; object-fit: cover; }
         .controls { margin-top: 20px; text-align: center; }
-        #snap { background: var(--primary); color: white; border: none; width: 70px; height: 70px; border-radius: 50%; font-size: 25px; cursor: pointer; }
-        #debug-log { background: #333; color: #0f0; padding: 10px; margin-top: 10px; font-size: 10px; border-radius: 5px; display: none; text-align: left; max-height: 150px; overflow-y: auto; }
-        #result-card { background: white; margin-top: 20px; padding: 20px; border-radius: 15px; display: none; border-left: 5px solid var(--primary); }
+        #snap { background: var(--primary); color: white; border: none; width: 70px; height: 70px; border-radius: 50%; font-size: 25px; }
+        #result-card { display: none; background: white; width: 90%; max-width: 400px; padding: 20px; margin-top: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
     </style>
 </head>
 <body>
 
-<header><i class="fa-solid fa-leaf"></i> <b>АЛТАЙ-АГРО ИИ</b></header>
+<header><b>АЛТАЙ-АГРО ИИ</b></header>
 
-<div class="container">
-    <div id="video-wrapper"><video id="video" autoplay playsinline></video></div>
-    <div id="debug-log"></div>
-    <div class="controls">
-        <button id="snap"><i class="fa-solid fa-camera"></i></button>
-        <div id="status" style="margin-top:10px; font-size:14px; color:#7f8c8d;">Наведите на лист</div>
-    </div>
-    <div id="result-card">
-        <h3 id="res-title" style="margin:0; color: var(--primary);">Результат</h3>
-        <p id="res-text"></p>
-        <button onclick="location.reload()" style="width:100%; padding:10px; background:#eee; border:none; border-radius:5px;">Заново</button>
-    </div>
+<div id="video-wrapper"><video id="video" autoplay playsinline></video></div>
+
+<div class="controls">
+    <button id="snap"><i class="fa-solid fa-camera"></i></button>
+    <div id="status" style="margin-top:10px; color:#666;">Наведите на лист</div>
+</div>
+
+<div id="result-card">
+    <h3 id="res-title">Результат</h3>
+    <p id="res-text"></p>
+    <button onclick="location.reload()" style="width:100%; padding:10px; border:none; border-radius:5px;">Заново</button>
 </div>
 
 <canvas id="canvas" style="display:none;"></canvas>
@@ -43,21 +40,15 @@
     const canvas = document.getElementById('canvas');
     const snap = document.getElementById('snap');
     const status = document.getElementById('status');
-    const debugLog = document.getElementById('debug-log');
     const resultCard = document.getElementById('result-card');
 
-    const apiKey = 'CdvGNro7PblGEyDM9dzyxC39wkQejFRd2nuwJ8w7eBVUaTkCwT'; 
+    const apiKey = 'CdvGNro7PblGEyDM9dzyxC39wkQejFRd2nuwJ8w7eBVUaTkCwT';
 
-    function log(msg) {
-        debugLog.style.display = "block";
-        debugLog.innerHTML += `> ${msg}<br>`;
-    }
-
-    async function startCamera() {
+    async function start() {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-            video.srcObject = stream;
-        } catch (e) { log("Ошибка камеры: " + e.message); }
+            const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+            video.srcObject = s;
+        } catch (e) { status.innerText = "Ошибка камеры: " + e.message; }
     }
 
     snap.addEventListener('click', async () => {
@@ -66,12 +57,11 @@
         canvas.height = video.videoHeight;
         ctx.drawImage(video, 0, 0);
 
-        // 1. Получаем чистую строку Base64
-        const base64Data = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
+        // ОЧЕНЬ ВАЖНО: Отрезаем "data:image/jpeg;base64,"
+        const base64Image = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
         
-        status.innerText = "Анализ...";
+        status.innerText = "Связь с ИИ...";
         snap.style.display = "none";
-        log("Отправка запроса...");
 
         try {
             const response = await fetch('https://api.plant.id/v2/identify', {
@@ -80,39 +70,35 @@
                     'Content-Type': 'application/json',
                     'Api-Key': apiKey 
                 },
-                body: JSON.stringify({ 
-                    images: [base64Data], 
-                    organs: ["leaf"] 
+                body: JSON.stringify({
+                    images: [base64Image],
+                    organs: ["leaf"],
+                    modifiers: ["crops_fast"]
                 })
             });
 
-            log("Статус ответа: " + response.status);
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.message || "Ошибка сервера " + response.status);
+            }
 
             const data = await response.json();
-            
-            if (!response.ok) {
-                throw new Error(data.message || "Ошибка API " + response.status);
-            }
-
-            resultCard.style.display = "block";
             status.style.display = "none";
+            resultCard.style.display = "block";
             
-            if (data.suggestions && data.suggestions[0]) {
-                const best = data.suggestions[0];
-                document.getElementById('res-title').innerText = best.plant_name;
-                document.getElementById('res-text').innerHTML = `Точность: ${(best.probability * 100).toFixed(1)}%`;
-                log("Успешно распознано");
-            } else {
-                log("ИИ не нашел совпадений");
+            if (data.suggestions && data.suggestions.length > 0) {
+                const b = data.suggestions[0];
+                document.getElementById('res-title').innerText = b.plant_name;
+                document.getElementById('res-text').innerHTML = `Точность: ${(b.probability * 100).toFixed(1)}% <br><br> Растение узнано!`;
             }
         } catch (err) {
-            log("КРИТИЧЕСКАЯ ОШИБКА: " + err.message);
-            status.innerText = "Ошибка. См. лог ниже.";
+            alert("КРИТИЧЕСКАЯ ОШИБКА: " + err.message);
+            status.innerText = "Ошибка. Проверьте интернет или ключ.";
             snap.style.display = "inline-block";
         }
     });
 
-    startCamera();
+    start();
 </script>
 </body>
 </html>
