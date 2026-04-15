@@ -57,13 +57,11 @@
 
     async function init() {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "environment" } 
-            });
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
             video.srcObject = stream;
-            status.innerText = "Наведите камеру на лист и нажмите кнопку";
+            status.innerText = "Камера готова";
         } catch (e) { 
-            status.innerText = "Ошибка доступа к камере. Проверьте разрешения в браузере."; 
+            status.innerText = "Ошибка камеры: " + e.message; 
             status.style.color = "red";
         }
     }
@@ -74,12 +72,11 @@
         canvas.height = video.videoHeight;
         ctx.drawImage(video, 0, 0);
 
-        // Получаем Base64 и отрезаем мета-информацию (data:image/jpeg;base64,)
-        const base64Full = canvas.toDataURL('image/jpeg', 0.7);
-        const base64Image = base64Full.split(',')[1];
+        // Получаем чистый Base64
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
+        const base64Image = dataUrl.split(',')[1];
         
-        status.innerText = "Нейросеть анализирует...";
-        status.style.color = "#7f8c8d";
+        status.innerText = "Анализ...";
         loader.style.display = "block";
         snap.style.display = "none";
 
@@ -87,7 +84,8 @@
             const response = await fetch('https://plant.id', {
                 method: 'POST',
                 headers: { 
-                    'Content-Type': 'application/json', 
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                     'Api-Key': apiKey 
                 },
                 body: JSON.stringify({ 
@@ -97,27 +95,28 @@
             });
 
             const data = await response.json();
-            console.log("Ответ ИИ:", data);
+
+            if (!response.ok) {
+                throw new Error(data.message || `Ошибка сервера (${response.status})`);
+            }
 
             loader.style.display = "none";
+            status.style.display = "none";
+            resultCard.style.display = "block";
 
             if (data.suggestions && data.suggestions.length > 0) {
-                const res = data.suggestions[0];
-                resultCard.style.display = "block";
-                status.style.display = "none";
-                resTitle.innerText = res.plant_name;
-                resText.innerHTML = `Точность: ${(res.probability * 100).toFixed(1)}% <br><br><b>Совет для Алтая:</b> Растение определено. Проверьте наличие вредителей в базе региона.`;
-            } else if (data.error) {
-                throw new Error(data.error.message || "Ошибка API");
+                const best = data.suggestions[0];
+                resTitle.innerText = best.plant_name;
+                resText.innerHTML = `Точность: ${(best.probability * 100).toFixed(1)}%<br><br><b>Совет:</b> Растение определено. Проверьте типичные болезни Алтайского края.`;
             } else {
-                throw new Error("Растение не распознано. Попробуйте еще раз.");
+                resTitle.innerText = "Неизвестно";
+                resText.innerText = "ИИ не смог уверенно распознать объект.";
             }
         } catch (err) {
             loader.style.display = "none";
             snap.style.display = "inline-block";
             status.innerText = "Ошибка: " + err.message;
             status.style.color = "red";
-            console.error("Детали:", err);
         }
     });
 
