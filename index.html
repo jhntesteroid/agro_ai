@@ -6,31 +6,42 @@
     <title>Алтай-Агро ИИ</title>
     <link rel="stylesheet" href="https://cloudflare.com">
     <style>
-        :root { --primary: #27ae60; --dark: #2c3e50; }
-        body { font-family: sans-serif; margin: 0; background: #f4f2f5; display: flex; flex-direction: column; align-items: center; }
-        header { width: 100%; background: var(--primary); color: white; padding: 15px 0; text-align: center; }
-        #video-wrapper { width: 90%; max-width: 400px; aspect-ratio: 3/4; background: #000; border-radius: 20px; overflow: hidden; margin-top: 20px; }
+        :root { --primary: #27ae60; --dark: #2c3e50; --bg: #f4f7f6; }
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; background: var(--bg); color: var(--dark); display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+        header { width: 100%; background: var(--primary); color: white; padding: 15px 0; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 10; }
+        .container { width: 95%; max-width: 500px; padding: 20px 0; }
+        #video-wrapper { position: relative; width: 100%; aspect-ratio: 3/4; background: #000; border-radius: 25px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
         video { width: 100%; height: 100%; object-fit: cover; }
-        .controls { margin-top: 20px; text-align: center; }
-        #snap { background: var(--primary); color: white; border: none; width: 70px; height: 70px; border-radius: 50%; font-size: 25px; }
-        #result-card { display: none; background: white; width: 90%; max-width: 400px; padding: 20px; margin-top: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .controls { margin-top: 25px; text-align: center; }
+        #snap { background: var(--primary); color: white; border: none; width: 80px; height: 80px; border-radius: 50%; font-size: 30px; cursor: pointer; transition: 0.3s; box-shadow: 0 5px 15px rgba(39, 174, 96, 0.4); }
+        #snap:active { transform: scale(0.9); }
+        #result-card { background: white; margin-top: 20px; padding: 25px; border-radius: 20px; display: none; box-shadow: 0 5px 15px rgba(0,0,0,0.05); border-top: 6px solid var(--primary); }
+        .status { font-size: 15px; margin-top: 12px; color: #7f8c8d; font-weight: 500; }
+        .loader { display: none; margin: 15px auto; border: 4px solid #f3f3f3; border-top: 4px solid var(--primary); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .advice-box { background: #f0fff4; border-radius: 10px; padding: 15px; margin-top: 15px; border-left: 4px solid #2ecc71; font-size: 14px; line-height: 1.5; }
     </style>
 </head>
 <body>
 
-<header><b>АЛТАЙ-АГРО ИИ</b></header>
+<header><i class="fa-solid fa-seedling"></i> <b>АЛТАЙ-АГРО ИИ</b></header>
 
-<div id="video-wrapper"><video id="video" autoplay playsinline></video></div>
+<div class="container">
+    <div id="video-wrapper"><video id="video" autoplay playsinline></video></div>
+    
+    <div class="controls">
+        <button id="snap"><i class="fa-solid fa-camera"></i></button>
+        <div id="status" class="status">Наведите на лист растения</div>
+        <div id="loader" class="loader"></div>
+    </div>
 
-<div class="controls">
-    <button id="snap"><i class="fa-solid fa-camera"></i></button>
-    <div id="status" style="margin-top:10px; color:#666;">Наведите на лист</div>
-</div>
-
-<div id="result-card">
-    <h3 id="res-title">Результат</h3>
-    <p id="res-text"></p>
-    <button onclick="location.reload()" style="width:100%; padding:10px; border:none; border-radius:5px;">Заново</button>
+    <div id="result-card">
+        <h2 id="res-title" style="margin:0; color: var(--primary); font-size: 22px;">Название</h2>
+        <div id="res-prob" style="color: #95a5a6; font-size: 14px; margin-bottom: 15px;">Точность: 0%</div>
+        <div id="res-advice" class="advice-box"></div>
+        <br>
+        <button onclick="location.reload()" style="width:100%; padding:12px; background: #eee; border:none; border-radius:10px; font-weight:bold; cursor:pointer;">СДЕЛАТЬ НОВОЕ ФОТО</button>
+    </div>
 </div>
 
 <canvas id="canvas" style="display:none;"></canvas>
@@ -40,65 +51,97 @@
     const canvas = document.getElementById('canvas');
     const snap = document.getElementById('snap');
     const status = document.getElementById('status');
+    const loader = document.getElementById('loader');
     const resultCard = document.getElementById('result-card');
 
-    const apiKey = 'CdvGNro7PblGEyDM9dzyxC39wkQejFRd2nuwJ8w7eBVUaTkCwT';
+    const apiKey = 'CdvGNro7PblGEyDM9dzyxC39wkQejFRd2nuwJ8w7eBVUaTkCwT'; 
 
-    async function start() {
+    // Запуск камеры
+    async function init() {
         try {
-            const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-            video.srcObject = s;
-        } catch (e) { status.innerText = "Ошибка камеры: " + e.message; }
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                video: { facingMode: "environment" } 
+            });
+            video.srcObject = stream;
+        } catch (e) {
+            status.innerText = "Ошибка камеры. Проверьте разрешения.";
+            status.style.color = "red";
+        }
     }
 
+    // Обработка клика
     snap.addEventListener('click', async () => {
         const ctx = canvas.getContext('2d');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         ctx.drawImage(video, 0, 0);
 
-        // ОЧЕНЬ ВАЖНО: Отрезаем "data:image/jpeg;base64,"
-        const base64Image = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
+        const base64Data = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
         
-        status.innerText = "Связь с ИИ...";
+        status.innerText = "ИИ изучает растение...";
+        loader.style.display = "block";
         snap.style.display = "none";
 
         try {
-            const response = await fetch('https://api.plant.id/v2/identify', {
+            const response = await fetch('https://plant.id', {
                 method: 'POST',
                 headers: { 
                     'Content-Type': 'application/json',
                     'Api-Key': apiKey 
                 },
-                body: JSON.stringify({
-                    images: [base64Image],
+                body: JSON.stringify({ 
+                    images: [base64Data], 
                     organs: ["leaf"],
-                    modifiers: ["crops_fast"]
+                    language: "ru", // ВКЛЮЧАЕМ РУССКИЙ ЯЗЫК
+                    plant_details: ["common_names", "edible_parts", "wiki_description"] 
                 })
             });
 
-            if (!response.ok) {
-                const errData = await response.json();
-                throw new Error(errData.message || "Ошибка сервера " + response.status);
-            }
-
             const data = await response.json();
-            status.style.display = "none";
-            resultCard.style.display = "block";
-            
+            loader.style.display = "none";
+
             if (data.suggestions && data.suggestions.length > 0) {
-                const b = data.suggestions[0];
-                document.getElementById('res-title').innerText = b.plant_name;
-                document.getElementById('res-text').innerHTML = `Точность: ${(b.probability * 100).toFixed(1)}% <br><br> Растение узнано!`;
+                const best = data.suggestions[0];
+                const ruName = (best.plant_details && best.plant_details.common_names) 
+                    ? best.plant_details.common_names[0] 
+                    : best.plant_name;
+
+                displayResult(ruName, (best.probability * 100).toFixed(1));
+            } else {
+                throw new Error("Растение не распознано. Попробуйте еще раз.");
             }
         } catch (err) {
-            alert("КРИТИЧЕСКАЯ ОШИБКА: " + err.message);
-            status.innerText = "Ошибка. Проверьте интернет или ключ.";
+            loader.style.display = "none";
             snap.style.display = "inline-block";
+            status.innerText = "Ошибка: " + err.message;
+            status.style.color = "red";
         }
     });
 
-    start();
+    function displayResult(name, prob) {
+        status.style.display = "none";
+        resultCard.style.display = "block";
+        document.getElementById('res-title').innerText = name.charAt(0).toUpperCase() + name.slice(1);
+        document.getElementById('res-prob').innerText = `Вероятность определения: ${prob}%`;
+        
+        // ЛОГИКА АЛТАЙСКИХ СОВЕТОВ
+        let advice = "Растение определено. Для условий Алтайского края важно следить за графиком полива и ночными температурами.";
+        const lowName = name.toLowerCase();
+
+        if (lowName.includes("фикус")) {
+            advice = "<b>Совет для дома:</b> Фикусы не любят сквозняков, которые часто бывают в квартирах Барнаула зимой. Протирайте листья от пыли для лучшего роста.";
+        } else if (lowName.includes("пшеница") || lowName.includes("triticum")) {
+            advice = "<b>Агро-совет (Алтай):</b> В этом сезоне в крае ожидается дефицит влаги в июне. Проверьте состояние узла кущения и рассмотрите возможность внекорневой подкормки.";
+        } else if (lowName.includes("подсолнечник")) {
+            advice = "<b>Агро-совет (Алтай):</b> Обратите внимание на наличие лугового мотылька. В степных районах края (Кулунда, Рубцовск) риск поражения выше среднего.";
+        } else if (lowName.includes("картофель")) {
+            advice = "<b>Совет для дачи:</b> На Алтае пора активировать защиту от колорадского жука. Рекомендуется окучивание при высоте всходов 15-20 см.";
+        }
+
+        document.getElementById('res-advice').innerHTML = advice;
+    }
+
+    init();
 </script>
 </body>
 </html>
