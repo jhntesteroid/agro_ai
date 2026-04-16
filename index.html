@@ -26,17 +26,16 @@
 
 <div class="container">
     <div id="video-wrapper"><video id="video" autoplay playsinline></video></div>
-    
     <div class="controls">
         <button id="snap"><i class="fa-solid fa-camera"></i></button>
-        <div id="status" class="status">Наведите на лист и нажмите кнопку</div>
+        <div id="status" class="status">Сделайте фото растения</div>
         <div id="loader" class="loader"></div>
     </div>
 
     <div id="result-card">
         <h2 id="res-title" style="margin:0; color: var(--primary);">Название</h2>
         <div id="res-prob" style="color: #95a5a6; font-size: 14px; margin-bottom: 15px;">Точность: 0%</div>
-        <div id="res-advice" style="background:#f0fff4; padding:15px; border-radius:10px; border-left:4px solid #2ecc71; font-size:14px;"></div>
+        <div id="res-advice" style="background:#f0fff4; padding:15px; border-radius:10px; font-size:14px; border-left:4px solid #2ecc71;"></div>
         <br>
         <button onclick="location.reload()" style="width:100%; padding:12px; background: #eee; border:none; border-radius:10px; font-weight:bold; cursor:pointer;">НОВЫЙ СНИМОК</button>
     </div>
@@ -56,9 +55,7 @@
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
             video.srcObject = stream;
-        } catch (e) {
-            status.innerText = "Ошибка камеры: " + e.message;
-        }
+        } catch (e) { status.innerText = "Ошибка камеры: " + e.message; }
     }
 
     snap.addEventListener('click', async () => {
@@ -67,15 +64,14 @@
         canvas.height = video.videoHeight;
         ctx.drawImage(video, 0, 0);
 
-        // Получаем чистый Base64 (без заголовка)
-        const base64String = canvas.toDataURL('image/jpeg', 0.5).split(',')[1];
+        const base64String = canvas.toDataURL('image/jpeg', 0.5);
         
-        status.innerText = "Связь с сервером Amvera в РФ...";
+        status.innerText = "Анализ через Amvera...";
         loader.style.display = "block";
         snap.style.display = "none";
 
         try {
-            // ВАШ АДРЕС НА AMVERA
+            // ВАЖНО: Весь путь с /identify в конце
             const serverUrl = 'https://amvera.io';
 
             const response = await fetch(serverUrl, {
@@ -93,25 +89,20 @@
                              ? best.plant_details.common_names[0] 
                              : best.plant_name;
 
-                showResult(name, (best.probability * 100).toFixed(1));
+                status.style.display = "none";
+                resultCard.style.display = "block";
+                document.getElementById('res-title').innerText = name;
+                document.getElementById('res-prob').innerText = `Точность: ${(best.probability * 100).toFixed(1)}%`;
+                document.getElementById('res-advice').innerHTML = "<b>Совет для Алтая:</b> Растение определено. Проверьте условия полива.";
             } else {
-                throw new Error(data.error || "Растение не распознано.");
+                throw new Error("Растение не распознано. Попробуйте еще раз.");
             }
         } catch (err) {
             loader.style.display = "none";
             snap.style.display = "inline-block";
             status.innerText = "Ошибка: " + err.message;
-            console.error(err);
         }
     });
-
-    function showResult(name, prob) {
-        status.style.display = "none";
-        resultCard.style.display = "block";
-        document.getElementById('res-title').innerText = name;
-        document.getElementById('res-prob').innerText = `Точность: ${prob}%`;
-        document.getElementById('res-advice').innerHTML = "<b>Агро-совет:</b> Растение определено успешно. Для Алтайского края рекомендуем проверить наличие влаги в почве.";
-    }
 
     init();
 </script>
