@@ -7,16 +7,15 @@
     <link rel="stylesheet" href="https://cloudflare.com">
     <style>
         :root { --primary: #27ae60; --dark: #2c3e50; --bg: #f4f7f6; }
-        body { font-family: 'Segoe UI', Tahoma, sans-serif; margin: 0; background: var(--bg); color: var(--dark); display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-        header { width: 100%; background: var(--primary); color: white; padding: 15px 0; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 10; }
+        body { font-family: 'Segoe UI', sans-serif; margin: 0; background: var(--bg); color: var(--dark); display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+        header { width: 100%; background: var(--primary); color: white; padding: 15px 0; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.1); sticky; top: 0; z-index: 10; }
         .container { width: 95%; max-width: 500px; padding: 20px 0; }
         #video-wrapper { position: relative; width: 100%; aspect-ratio: 3/4; background: #000; border-radius: 25px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
         video { width: 100%; height: 100%; object-fit: cover; }
         .controls { margin-top: 25px; text-align: center; }
-        #snap { background: var(--primary); color: white; border: none; width: 80px; height: 80px; border-radius: 50%; font-size: 30px; cursor: pointer; transition: 0.3s; box-shadow: 0 5px 15px rgba(39, 174, 96, 0.4); }
-        #snap:active { transform: scale(0.9); }
+        #snap { background: var(--primary); color: white; border: none; width: 80px; height: 80px; border-radius: 50%; font-size: 30px; cursor: pointer; box-shadow: 0 5px 15px rgba(39, 174, 96, 0.4); }
         #result-card { background: white; margin-top: 20px; padding: 25px; border-radius: 20px; display: none; box-shadow: 0 5px 15px rgba(0,0,0,0.05); border-top: 6px solid var(--primary); }
-        .status { font-size: 15px; margin-top: 12px; color: #7f8c8d; font-weight: 500; }
+        .status { font-size: 15px; margin-top: 12px; color: #7f8c8d; font-weight: 500; min-height: 20px; }
         .loader { display: none; margin: 15px auto; border: 4px solid #f3f3f3; border-top: 4px solid var(--primary); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .advice-box { background: #f0fff4; border-radius: 10px; padding: 15px; margin-top: 15px; border-left: 4px solid #2ecc71; font-size: 14px; line-height: 1.5; }
@@ -31,7 +30,7 @@
     
     <div class="controls">
         <button id="snap"><i class="fa-solid fa-camera"></i></button>
-        <div id="status" class="status">Наведите на лист растения</div>
+        <div id="status" class="status">Камера запускается...</div>
         <div id="loader" class="loader"></div>
     </div>
 
@@ -40,7 +39,7 @@
         <div id="res-prob" style="color: #95a5a6; font-size: 14px; margin-bottom: 15px;">Точность: 0%</div>
         <div id="res-advice" class="advice-box"></div>
         <br>
-        <button onclick="location.reload()" style="width:100%; padding:12px; background: #eee; border:none; border-radius:10px; font-weight:bold; cursor:pointer;">СДЕЛАТЬ НОВОЕ ФОТО</button>
+        <button onclick="location.reload()" style="width:100%; padding:12px; background: #eee; border:none; border-radius:10px; font-weight:bold; cursor:pointer;">НОВЫЙ СНИМОК</button>
     </div>
 </div>
 
@@ -56,29 +55,27 @@
 
     const apiKey = 'CdvGNro7PblGEyDM9dzyxC39wkQejFRd2nuwJ8w7eBVUaTkCwT'; 
 
-    // Запуск камеры
     async function init() {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "environment" } 
-            });
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
             video.srcObject = stream;
+            status.innerText = "Наведите на лист и нажмите кнопку";
         } catch (e) {
-            status.innerText = "Ошибка камеры. Проверьте разрешения.";
-            status.style.color = "red";
+            status.innerText = "Ошибка камеры: " + e.message;
         }
     }
 
-    // Обработка клика
     snap.addEventListener('click', async () => {
         const ctx = canvas.getContext('2d');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         ctx.drawImage(video, 0, 0);
 
-        const base64Data = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
+        // Корректная подготовка Base64
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+        const base64String = dataUrl.split(',')[1]; // Берем только саму строку данных
         
-        status.innerText = "ИИ изучает растение...";
+        status.innerText = "Анализ нейросетью...";
         loader.style.display = "block";
         snap.style.display = "none";
 
@@ -90,12 +87,17 @@
                     'Api-Key': apiKey 
                 },
                 body: JSON.stringify({ 
-                    images: [base64Data], 
+                    images: [base64String], // Передаем чистую строку в массиве
                     organs: ["leaf"],
-                    language: "ru", // ВКЛЮЧАЕМ РУССКИЙ ЯЗЫК
-                    plant_details: ["common_names", "edible_parts", "wiki_description"] 
+                    language: "ru",
+                    plant_details: ["common_names", "wiki_description"] 
                 })
             });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || `Ошибка сервера ${response.status}`);
+            }
 
             const data = await response.json();
             loader.style.display = "none";
@@ -106,36 +108,33 @@
                     ? best.plant_details.common_names[0] 
                     : best.plant_name;
 
-                displayResult(ruName, (best.probability * 100).toFixed(1));
+                showResult(ruName, (best.probability * 100).toFixed(1));
             } else {
-                throw new Error("Растение не распознано. Попробуйте еще раз.");
+                throw new Error("Растение не распознано.");
             }
         } catch (err) {
             loader.style.display = "none";
             snap.style.display = "inline-block";
             status.innerText = "Ошибка: " + err.message;
-            status.style.color = "red";
+            console.error(err);
         }
     });
 
-    function displayResult(name, prob) {
+    function showResult(name, prob) {
         status.style.display = "none";
         resultCard.style.display = "block";
         document.getElementById('res-title').innerText = name.charAt(0).toUpperCase() + name.slice(1);
-        document.getElementById('res-prob').innerText = `Вероятность определения: ${prob}%`;
+        document.getElementById('res-prob').innerText = `Точность: ${prob}%`;
         
-        // ЛОГИКА АЛТАЙСКИХ СОВЕТОВ
-        let advice = "Растение определено. Для условий Алтайского края важно следить за графиком полива и ночными температурами.";
+        let advice = "Растение определено. Для Алтайского края важно учитывать текущий прогноз заморозков.";
         const lowName = name.toLowerCase();
 
         if (lowName.includes("фикус")) {
-            advice = "<b>Совет для дома:</b> Фикусы не любят сквозняков, которые часто бывают в квартирах Барнаула зимой. Протирайте листья от пыли для лучшего роста.";
-        } else if (lowName.includes("пшеница") || lowName.includes("triticum")) {
-            advice = "<b>Агро-совет (Алтай):</b> В этом сезоне в крае ожидается дефицит влаги в июне. Проверьте состояние узла кущения и рассмотрите возможность внекорневой подкормки.";
-        } else if (lowName.includes("подсолнечник")) {
-            advice = "<b>Агро-совет (Алтай):</b> Обратите внимание на наличие лугового мотылька. В степных районах края (Кулунда, Рубцовск) риск поражения выше среднего.";
+            advice = "<b>Совет для дома:</b> Фикусы чувствительны к сквознякам. В условиях Сибири зимой держите растение подальше от открытых форточек.";
+        } else if (lowName.includes("пшеница")) {
+            advice = "<b>Агро-совет (Алтай):</b> В текущем сезоне следите за влажностью почвы. Рекомендуется мониторинг на наличие вредителей всходов.";
         } else if (lowName.includes("картофель")) {
-            advice = "<b>Совет для дачи:</b> На Алтае пора активировать защиту от колорадского жука. Рекомендуется окучивание при высоте всходов 15-20 см.";
+            advice = "<b>Совет для дачи:</b> Пора готовиться к защите от жука. Ближайшие магазины семян в Барнауле уже обновили ассортимент препаратов.";
         }
 
         document.getElementById('res-advice').innerHTML = advice;
