@@ -1,110 +1,68 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Алтай-Агро ИИ</title>
-    <link rel="stylesheet" href="https://cloudflare.com">
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Алтай-Агро Офлайн</title>
+    <!-- Подключаем легкий ИИ прямо в браузер -->
+    <script src="https://jsdelivr.net"></script>
+    <script src="https://jsdelivr.net"></script>
     <style>
-        :root { --primary: #27ae60; --bg: #f4f7f6; }
-        body { font-family: sans-serif; margin: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
-        header { width: 100%; background: var(--primary); color: white; padding: 15px 0; text-align: center; }
-        .container { width: 95%; max-width: 500px; padding: 20px 0; }
-        #video-wrapper { width: 100%; aspect-ratio: 3/4; background: #000; border-radius: 25px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.15); }
-        video { width: 100%; height: 100%; object-fit: cover; }
-        .controls { margin-top: 25px; text-align: center; }
-        #snap { background: var(--primary); color: white; border: none; width: 80px; height: 80px; border-radius: 50%; font-size: 30px; cursor: pointer; }
-        #result-card { background: white; margin-top: 20px; padding: 25px; border-radius: 20px; display: none; box-shadow: 0 5px 15px rgba(0,0,0,0.05); border-top: 6px solid var(--primary); }
-        .status { font-size: 15px; margin-top: 12px; color: #7f8c8d; }
-        .loader { display: none; margin: 15px auto; border: 4px solid #f3f3f3; border-top: 4px solid var(--primary); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        body { font-family: sans-serif; text-align: center; background: #e8f5e9; padding: 20px; margin: 0; }
+        #v { width: 100%; max-width: 400px; border-radius: 20px; box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+        .btn { background: #2e7d32; color: white; padding: 20px; border-radius: 50%; border: none; font-size: 24px; margin-top: 20px; cursor: pointer; }
+        #res { margin-top: 20px; padding: 20px; background: white; border-radius: 15px; display: none; }
     </style>
 </head>
 <body>
+    <h3>🌿 Алтай-Агро ИИ (Offline)</h3>
+    <video id="v" autoplay playsinline></video>
+    <div id="status">Загрузка ИИ-модели...</div>
+    <button id="snap" class="btn">📸</button>
 
-<header><i class="fa-solid fa-seedling"></i> <b>АЛТАЙ-АГРО ИИ</b></header>
-
-<div class="container">
-    <div id="video-wrapper"><video id="video" autoplay playsinline></video></div>
-    <div class="controls">
-        <button id="snap"><i class="fa-solid fa-camera"></i></button>
-        <div id="status" class="status">Сделайте фото растения</div>
-        <div id="loader" class="loader"></div>
+    <div id="res">
+        <h2 id="name" style="color:#2e7d32">Анализ...</h2>
+        <p id="advice"></p>
+        <button onclick="location.reload()">Заново</button>
     </div>
 
-    <div id="result-card">
-        <h2 id="res-title" style="margin:0; color: var(--primary);">Название</h2>
-        <div id="res-prob" style="color: #95a5a6; font-size: 14px; margin-bottom: 15px;">Точность: 0%</div>
-        <div id="res-advice" style="background:#f0fff4; padding:15px; border-radius:10px; font-size:14px; border-left:4px solid #2ecc71;"></div>
-        <br>
-        <button onclick="location.reload()" style="width:100%; padding:12px; background: #eee; border:none; border-radius:10px; font-weight:bold; cursor:pointer;">НОВЫЙ СНИМОК</button>
-    </div>
-</div>
+    <script>
+        const v = document.getElementById('v'), s = document.getElementById('status'), n = document.getElementById('name'), a = document.getElementById('advice'), res = document.getElementById('res');
+        let model;
 
-<canvas id="canvas" style="display:none;"></canvas>
-
-<script>
-    const video = document.getElementById('video');
-    const canvas = document.getElementById('canvas');
-    const snap = document.getElementById('snap');
-    const status = document.getElementById('status');
-    const loader = document.getElementById('loader');
-    const resultCard = document.getElementById('result-card');
-
-    async function init() {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-            video.srcObject = stream;
-        } catch (e) { status.innerText = "Ошибка камеры: " + e.message; }
-    }
-
-    snap.addEventListener('click', async () => {
-        const ctx = canvas.getContext('2d');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        ctx.drawImage(video, 0, 0);
-
-        const base64String = canvas.toDataURL('image/jpeg', 0.5);
-        
-        status.innerText = "Анализ через Amvera...";
-        loader.style.display = "block";
-        snap.style.display = "none";
-
-        try {
-            // ВАЖНО: Весь путь с /identify в конце
-            const serverUrl = 'https://amvera.io';
-
-            const response = await fetch(serverUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ images: [base64String] })
-            });
-
-            const data = await response.json();
-            loader.style.display = "none";
-
-            if (data.suggestions && data.suggestions.length > 0) {
-                const best = data.suggestions[0];
-                const name = (best.plant_details && best.plant_details.common_names) 
-                             ? best.plant_details.common_names[0] 
-                             : best.plant_name;
-
-                status.style.display = "none";
-                resultCard.style.display = "block";
-                document.getElementById('res-title').innerText = name;
-                document.getElementById('res-prob').innerText = `Точность: ${(best.probability * 100).toFixed(1)}%`;
-                document.getElementById('res-advice').innerHTML = "<b>Совет для Алтая:</b> Растение определено. Проверьте условия полива.";
-            } else {
-                throw new Error("Растение не распознано. Попробуйте еще раз.");
-            }
-        } catch (err) {
-            loader.style.display = "none";
-            snap.style.display = "inline-block";
-            status.innerText = "Ошибка: " + err.message;
+        // 1. Загружаем камеру и ИИ
+        async function init() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({video: {facingMode: "environment"}});
+                v.srcObject = stream;
+                s.innerText = "ИИ загружается (1-2 Мб)...";
+                model = await mobilenet.load();
+                s.innerText = "ИИ готов! Наведите на растение.";
+            } catch (e) { s.innerText = "Ошибка: " + e.message; }
         }
-    });
 
-    init();
-</script>
+        // 2. Распознаем локально (без сервера!)
+        document.getElementById('snap').onclick = async () => {
+            if (!model) return;
+            s.innerText = "Мгновенный анализ...";
+            
+            const predictions = await model.classify(v);
+            
+            s.style.display = "none";
+            res.style.display = "block";
+            
+            const best = predictions[0];
+            n.innerText = best.className; // Название на английском (базовая модель)
+            
+            // Локальная логика для Алтая
+            let advice = "Растение определено локальным ИИ. Для точного диагноза болезней требуется интернет.";
+            if (best.className.toLowerCase().includes('leaf')) {
+                advice = "<b>Совет для Алтая:</b> Это лист растения. Проверьте его на наличие пятен или насекомых.";
+            }
+            
+            a.innerHTML = `Точность: ${(best.probability * 100).toFixed(1)}% <br><br> ${advice}`;
+        };
+
+        init();
+    </script>
 </body>
 </html>
